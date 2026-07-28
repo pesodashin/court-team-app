@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2f6f4e">
+<title>コート抽選</title>
+<style>
+:root{--bg:#f5f7f6;--card:#fff;--text:#1f2933;--muted:#667085;--border:#cfd8d3;--accent:#2f6f4e;--danger:#a33a3a;--danger-soft:#fbeaea;--header:#dfeee3}*{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--text)}main{width:min(980px,100%);margin:0 auto;padding:20px}h1{margin:0 0 18px;font-size:28px}h2{margin:0 0 12px;font-size:20px}.card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:16px}.settings{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}label{display:block;font-weight:600;font-size:14px}input{width:100%;margin-top:6px;padding:12px;font-size:18px;border:1px solid var(--border);border-radius:10px;background:white}.actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px}button{appearance:none;border:0;border-radius:10px;padding:12px 18px;font-size:16px;font-weight:700;cursor:pointer}.primary{background:var(--accent);color:white}.secondary{background:#e9eeeb;color:var(--text)}.danger{background:var(--danger-soft);color:var(--danger);border:1px solid #e5bcbc}.message{margin-top:12px;color:var(--danger);font-weight:600;min-height:1.4em}.courts{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}.court{border:1px solid var(--border);border-radius:12px;overflow:hidden;background:white}.court h3{margin:0;padding:10px;background:var(--header);text-align:center;font-size:17px}.court ul{margin:0;padding:0;list-style:none}.court li{text-align:center;padding:11px;border-top:1px solid var(--border);font-size:20px}.table-wrap{overflow-x:auto}table{width:100%;border-collapse:collapse;background:white}th,td{border:1px solid var(--border);padding:9px;text-align:center;white-space:nowrap}th{background:var(--header)}.summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:8px}.summary-item{border:1px solid var(--border);border-radius:10px;padding:10px;text-align:center;background:white}.summary-item strong{display:block;font-size:22px;margin-top:3px}.note{color:var(--muted);font-size:14px;line-height:1.6;margin-top:10px}@media(max-width:640px){main{padding:12px}.settings{grid-template-columns:1fr}button{width:100%}}
+</style>
+</head>
+<body>
+<main>
+<h1>コート抽選</h1>
+<section class="card">
+<h2>設定</h2>
+<div class="settings">
+<label>コート数<input id="courtCount" type="number" min="2" max="26" value="3"></label>
+<label>参加人数<input id="participantCount" type="number" min="1" value="10"></label>
+<label>振分け人数<input id="normalCourtSize" type="number" min="1" value="4"></label>
+</div>
+<div class="actions">
+<button id="drawButton" class="primary" type="button">次試合を抽選</button>
+<button id="csvButton" class="secondary" type="button">履歴をCSV保存</button>
+<button id="resetButton" class="danger" type="button">履歴をリセット</button>
+</div>
+<div id="message" class="message" aria-live="polite"></div>
+<div class="note">参加者番号は1から参加人数まで自動作成します。最後のコートは余り人数です。最後のコートは累計回数が少ない人を優先し、前回の人は可能な限り連続選出しません。</div>
+</section>
+<section class="card"><h2>今回の振分け</h2><div id="result" class="courts"></div></section>
+<section class="card"><h2>最終コート回数</h2><div id="countSummary" class="summary-grid"></div></section>
+<section class="card"><h2>試合履歴</h2><div class="table-wrap"><table><thead id="historyHead"></thead><tbody id="historyBody"></tbody></table></div></section>
+</main>
+<script>
+(()=>{
+const STORAGE_KEY="courtLotteryHistory_v1";
+const q=id=>document.getElementById(id);
+const courtCountInput=q("courtCount"),participantCountInput=q("participantCount"),normalCourtSizeInput=q("normalCourtSize"),drawButton=q("drawButton"),csvButton=q("csvButton"),resetButton=q("resetButton"),result=q("result"),historyHead=q("historyHead"),historyBody=q("historyBody"),countSummary=q("countSummary"),message=q("message");
+let history=loadHistory();
+function loadHistory(){try{const raw=localStorage.getItem(STORAGE_KEY);return raw?JSON.parse(raw):[]}catch{return[]}}
+function saveHistory(){localStorage.setItem(STORAGE_KEY,JSON.stringify(history))}
+function courtName(i){return String.fromCharCode(65+i)+"コート"}
+function shuffle(array){const a=array.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+function getSettings(){return{courtCount:Number(courtCountInput.value),participantCount:Number(participantCountInput.value),normalCourtSize:Number(normalCourtSizeInput.value)}}
+function validateSettings(s){const{courtCount,participantCount,normalCourtSize}=s;if(!Number.isInteger(courtCount)||courtCount<2||courtCount>26)return"コート数は2～26で入力してください。";if(!Number.isInteger(participantCount)||participantCount<1)return"参加人数は1以上で入力してください。";if(!Number.isInteger(normalCourtSize)||normalCourtSize<1)return"振分け人数は1以上で入力してください。";const last=participantCount-((courtCount-1)*normalCourtSize);if(last<1)return"最後のコートに1人以上残るように設定してください。";if(last>normalCourtSize)return"最後のコート人数が振分け人数を超えています。設定を確認してください。";return""}
+function buildCounts(n){const counts=Array(n+1).fill(0);for(const game of history){for(const member of game.lastCourt||[]){if(member>=1&&member<=n)counts[member]++}}return counts}
+function selectLastCourt(s){const{participantCount,courtCount,normalCourtSize}=s,lastCount=participantCount-((courtCount-1)*normalCourtSize),counts=buildCounts(participantCount),previous=history.length?new Set(history[history.length-1].lastCourt||[]):new Set(),selected=[];while(selected.length<lastCount){let candidates=[];for(let n=1;n<=participantCount;n++){if(!selected.includes(n)&&!previous.has(n))candidates.push(n)}if(!candidates.length){for(let n=1;n<=participantCount;n++){if(!selected.includes(n))candidates.push(n)}}const min=Math.min(...candidates.map(n=>counts[n])),least=candidates.filter(n=>counts[n]===min),picked=least[Math.floor(Math.random()*least.length)];selected.push(picked);counts[picked]++}return shuffle(selected)}
+function drawGame(){message.textContent="";const s=getSettings(),err=validateSettings(s);if(err){message.textContent=err;return}if(!confirm("次試合のチーム分けを実行しますか？"))return;const participants=Array.from({length:s.participantCount},(_,i)=>i+1),lastCourt=selectLastCourt(s),lastSet=new Set(lastCourt),playing=shuffle(participants.filter(n=>!lastSet.has(n))),courts=[];let cursor=0;for(let i=0;i<s.courtCount-1;i++){courts.push(playing.slice(cursor,cursor+s.normalCourtSize));cursor+=s.normalCourtSize}courts.push(lastCourt);const game={game:history.length+1,date:new Date().toISOString(),settings:s,courts,lastCourt};history.push(game);saveHistory();renderAll(game)}
+function renderResult(game){result.innerHTML="";if(!game){result.innerHTML="<p>まだ抽選結果がありません。</p>";return}game.courts.forEach((members,index)=>{const section=document.createElement("section");section.className="court";const title=document.createElement("h3");title.textContent=courtName(index);section.appendChild(title);const list=document.createElement("ul");members.forEach(member=>{const item=document.createElement("li");item.textContent=member;list.appendChild(item)});section.appendChild(list);result.appendChild(section)})}
+function renderCounts(){const n=Number(participantCountInput.value)||0,counts=buildCounts(n);countSummary.innerHTML="";for(let i=1;i<=n;i++){const item=document.createElement("div");item.className="summary-item";item.innerHTML=`<span>${i}番</span><strong>${counts[i]}回</strong>`;countSummary.appendChild(item)}}
+function renderHistory(){historyHead.innerHTML="";historyBody.innerHTML="";if(!history.length){historyHead.innerHTML="<tr><th>試合</th><th>履歴なし</th></tr>";return}const maxCourts=Math.max(...history.map(g=>g.courts.length)),head=document.createElement("tr");const first=document.createElement("th");first.textContent="試合";head.appendChild(first);for(let i=0;i<maxCourts;i++){const th=document.createElement("th");th.textContent=courtName(i);head.appendChild(th)}historyHead.appendChild(head);history.forEach(game=>{const row=document.createElement("tr"),gameCell=document.createElement("td");gameCell.textContent=game.game;row.appendChild(gameCell);for(let i=0;i<maxCourts;i++){const cell=document.createElement("td");cell.textContent=game.courts[i]?game.courts[i].join("、"):"";row.appendChild(cell)}historyBody.appendChild(row)})}
+function renderAll(game){renderResult(game||history[history.length-1]);renderCounts();renderHistory()}
+function resetHistory(){if(!confirm("すべての抽選結果と履歴をリセットしますか？\nこの操作は元に戻せません。"))return;history=[];localStorage.removeItem(STORAGE_KEY);renderAll(null)}
+function exportCsv(){if(!history.length){message.textContent="保存する履歴がありません。";return}message.textContent="";const maxCourts=Math.max(...history.map(g=>g.courts.length)),rows=[],header=["試合","実施日時"];for(let i=0;i<maxCourts;i++)header.push(courtName(i));rows.push(header);history.forEach(game=>{const row=[game.game,new Date(game.date).toLocaleString("ja-JP")];for(let i=0;i<maxCourts;i++)row.push(game.courts[i]?game.courts[i].join("、"):"");rows.push(row)});const csv=rows.map(row=>row.map(v=>`"${String(v).replaceAll('"','""')}"`).join(",")).join("\r\n"),blob=new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8"}),link=document.createElement("a");link.href=URL.createObjectURL(blob);link.download="court-lottery-history.csv";document.body.appendChild(link);link.click();link.remove();URL.revokeObjectURL(link.href)}
+drawButton.addEventListener("click",drawGame);resetButton.addEventListener("click",resetHistory);csvButton.addEventListener("click",exportCsv);[courtCountInput,participantCountInput,normalCourtSizeInput].forEach(input=>input.addEventListener("change",renderCounts));renderAll();
+})();
+</script>
+</body>
+</html>
